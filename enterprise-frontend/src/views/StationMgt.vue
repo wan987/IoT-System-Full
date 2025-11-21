@@ -1,3 +1,4 @@
+
 <template>
   <div class="page-container">
     <el-card class="box-card" shadow="hover">
@@ -19,59 +20,64 @@
         </div>
         <div class="search-right">
           <el-button type="success" @click="handleAdd" icon="Plus">新建站点</el-button>
+          <el-button type="warning" icon="Download" @click="exportExcel" plain>导出数据</el-button>
         </div>
       </div>
 
-      <el-table
-          :data="tableData"
-          border
-          stripe
-          style="width: 100%; margin-top: 20px;"
-          :header-cell-style="{ background: '#f5f7fa', color: '#606266', fontWeight: 'bold' }"
-      >
-        <el-table-column prop="stationId" label="ID" width="80" align="center" />
+      <el-skeleton :rows="10" animated :loading="loading">
+        <template #default>
+          <el-table
+              :data="tableData"
+              border
+              stripe
+              style="width: 100%; margin-top: 20px;"
+              :header-cell-style="{ background: '#f5f7fa', color: '#606266', fontWeight: 'bold' }"
+          >
+            <el-table-column prop="stationId" label="ID" width="80" align="center" />
 
-        <el-table-column prop="stationName" label="站点名称" min-width="150">
-          <template #default="scope">
-            <span style="font-weight: 600; color: #303133;">{{ scope.row.stationName }}</span>
-          </template>
-        </el-table-column>
+            <el-table-column prop="stationName" label="站点名称" min-width="150">
+              <template #default="scope">
+                <span style="font-weight: 600; color: #303133;">{{ scope.row.stationName }}</span>
+              </template>
+            </el-table-column>
 
-        <el-table-column prop="stationLoc" label="位置" min-width="150" />
+            <el-table-column prop="stationLoc" label="位置" min-width="150" />
 
-        <el-table-column prop="status" label="状态" width="100" align="center">
-          <template #default="scope">
-            <el-tag
-                :type="scope.row.status === '0' ? 'success' : 'danger'"
-                effect="light"
-                round
-            >
-              {{ scope.row.status === '0' ? '运行中' : '已停用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
+            <el-table-column prop="status" label="状态" width="100" align="center">
+              <template #default="scope">
+                <el-tag
+                    :type="scope.row.status === '0' ? 'success' : 'danger'"
+                    effect="light"
+                    round
+                >
+                  {{ scope.row.status === '0' ? '运行中' : '已停用' }}
+                </el-tag>
+              </template>
+            </el-table-column>
 
-        <el-table-column prop="createTime" label="创建时间" width="180" align="center" />
+            <el-table-column prop="createTime" label="创建时间" width="180" align="center" />
 
-        <el-table-column label="操作" width="180" align="center" fixed="right">
-          <template #default="scope">
-            <el-button
-                size="small"
-                type="primary"
-                plain
-                icon="Edit"
-                @click="handleEdit(scope.row)"
-            >编辑</el-button>
-            <el-button
-                size="small"
-                type="danger"
-                plain
-                icon="Delete"
-                @click="handleDelete(scope.row.stationId)"
-            >删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+            <el-table-column label="操作" width="180" align="center" fixed="right">
+              <template #default="scope">
+                <el-button
+                    size="small"
+                    type="primary"
+                    plain
+                    icon="Edit"
+                    @click="handleEdit(scope.row)"
+                >编辑</el-button>
+                <el-button
+                    size="small"
+                    type="danger"
+                    plain
+                    icon="Delete"
+                    @click="handleDelete(scope.row.stationId)"
+                >删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
+      </el-skeleton>
 
       <div class="pagination-container">
         <el-pagination
@@ -113,6 +119,7 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import * as XLSX from 'xlsx'
 // 引入需要的图标
 import { Search, Plus, Edit, Delete } from '@element-plus/icons-vue'
 
@@ -123,9 +130,12 @@ const pageNum = ref(1)
 const pageSize = ref(10)
 const dialogVisible = ref(false)
 const form = ref({})
-
+const loading = ref(false)
+// 2. 修改 loadData 函数
 const loadData = () => {
-  // 这里要加上你的权限参数逻辑 (roleType, deptId)，我这里简写了，保留你之前的即可
+  loading.value = true // <--- 请求前：开启骨架屏
+
+  // ...这里是你之前的获取用户权限的代码...
   const userStr = localStorage.getItem('user')
   let userParams = {}
   if (userStr) {
@@ -147,9 +157,12 @@ const loadData = () => {
     } else {
       ElMessage.error(res.data.msg)
     }
+    // 稍微延迟一下关闭，为了让骨架屏展示出来（哪怕网速快也能看到那个帅气的动画）
+    setTimeout(() => { loading.value = false }, 300) // <--- 请求后：关闭骨架屏
+  }).catch(() => {
+    loading.value = false // <--- 报错也要关闭
   })
 }
-
 const handlePageChange = (val) => { pageNum.value = val; loadData() }
 const handleAdd = () => { form.value = { status: '0' }; dialogVisible.value = true }
 const handleEdit = (row) => { form.value = { ...row }; dialogVisible.value = true }
@@ -172,7 +185,27 @@ const handleDelete = (id) => {
         })
       })
 }
+// 导出函数
+const exportExcel = () => {
+  // 1. 准备表头和数据
+  // 我们可以直接把 tableData 转换成 Excel 需要的格式
+  const data = tableData.value.map(item => ({
+    '站点ID': item.stationId,
+    '站点名称': item.stationName,
+    '地理位置': item.stationLoc,
+    '状态': item.status === '0' ? '正常' : '停用',
+    '创建时间': item.createTime
+  }))
 
+  // 2. 创建工作簿
+  const ws = XLSX.utils.json_to_sheet(data)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, "监测站点表")
+
+  // 3. 导出文件
+  XLSX.writeFile(wb, "监测站点列表.xlsx")
+  ElMessage.success('导出成功')
+}
 onMounted(() => loadData())
 </script>
 

@@ -1,0 +1,13 @@
+
+先启动后端
+
+终端输入
+cd enterprise-frontend
+npm run dev
+
+  http://localhost:5173/
+
+超级管理员
+admin 123456
+管理员
+user1 123456
